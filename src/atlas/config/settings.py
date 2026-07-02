@@ -22,6 +22,9 @@ class AtlasSettings(BaseSettings):
     channels: str = "book,ticker,trades"
     interval: str = "100ms"
     futures_count: int = 3
+    deribit_heartbeat_interval: int = 30
+    deribit_reconnect_base_delay: float = 1.0
+    deribit_reconnect_max_delay: float = 60.0
 
     # Deribit-specific (loaded without ATLAS_ prefix via nested or direct env)
     deribit_api_key: str = Field(default="", validation_alias="DERIBIT_API_KEY")
@@ -31,3 +34,7 @@ class AtlasSettings(BaseSettings):
     @property
     def channel_list(self) -> list[str]:
         return [c.strip() for c in self.channels.split(",") if c.strip()]
+
+    @property
+    def is_testnet(self) -> bool:
+        return self.deribit_environment.lower() == "testnet"

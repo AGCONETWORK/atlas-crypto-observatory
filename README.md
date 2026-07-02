@@ -30,8 +30,8 @@ See [CONSTITUTION.md](CONSTITUTION.md) for frozen Phase 1 principles.
 
 | Version | Milestone | Status |
 |---------|-----------|--------|
-| v0.1.0 | Foundation — contracts, bus, pipeline, JsonlSink | **Current** |
-| v0.2.0 | Deribit connection | Planned |
+| v0.1.0 | Foundation — contracts, bus, pipeline, JsonlSink | Complete |
+| v0.2.0 | Deribit connection — auth, WebSocket, reconnect, heartbeat | **Current** |
 | v0.3.0 | Instrument discovery & subscriptions | Planned |
 | v0.4.0 | Live recording | Planned |
 | v0.5.0 | Replay engine | Planned |
@@ -56,6 +56,9 @@ pip install -e ".[dev]"
 cp .env.example .env
 # Edit .env with your Deribit credentials
 
+# Test Deribit connection (v0.2.0)
+atlas connect --duration 30
+
 # Run tests
 pytest
 
@@ -73,7 +76,8 @@ src/atlas/
 ├── pipeline/       # Evidence Pipeline
 ├── storage/        # StorageSink, JsonlSink, manifest, integrity
 ├── replay/         # Replay manifest v1 (engine in v0.5.0)
-├── adapters/       # Exchange adapters (Deribit in v0.2.0)
+├── adapters/       # Exchange adapters
+│   └── deribit/    # Deribit auth, WebSocket, reconnect (v0.2.0)
 ├── config/         # Central configuration
 └── logging/        # Structured logging
 ```

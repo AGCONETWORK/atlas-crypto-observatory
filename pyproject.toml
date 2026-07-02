@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "atlas-mer"
-version = "0.1.0"
+version = "0.2.0"
 description = "ATLAS Market Event Recorder — evidence pipeline for immutable market data capture and replay"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "structlog>=24.4",
+    "websockets>=14.0",
 ]
 
 [project.optional-dependencies]
