@@ -31,8 +31,8 @@ See [CONSTITUTION.md](CONSTITUTION.md) for frozen Phase 1 principles.
 | Version | Milestone | Status |
 |---------|-----------|--------|
 | v0.1.0 | Foundation — contracts, bus, pipeline, JsonlSink | Complete |
-| v0.2.0 | Deribit connection — auth, WebSocket, reconnect, heartbeat | **Current** |
-| v0.3.0 | Instrument discovery & subscriptions | Planned |
+| v0.2.0 | Deribit connection — auth, WebSocket, reconnect, heartbeat | Complete |
+| v0.3.0 | Instrument discovery & subscriptions | **Current** |
 | v0.4.0 | Live recording | Planned |
 | v0.5.0 | Replay engine | Planned |
 | v0.6.0 | Hardening | Planned |
@@ -58,6 +58,9 @@ cp .env.example .env
 
 # Test Deribit connection (v0.2.0)
 atlas connect --duration 30
+
+# Discover and subscribe to BTC market data (v0.3.0)
+atlas subscribe --duration 60
 
 # Run tests
 pytest
