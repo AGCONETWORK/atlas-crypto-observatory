@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "atlas-mer"
-version = "0.6.0"
+version = "1.0.0"
 description = "ATLAS Market Event Recorder — evidence pipeline for immutable market data capture and replay"
 readme = "README.md"
 license = "MIT"
@@ -12,7 +12,7 @@ requires-python = ">=3.12"
 authors = [{ name = "ATLAS" }]
 keywords = ["market-data", "event-sourcing", "deribit", "observatory"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
@@ -47,6 +47,9 @@ only-include = ["src/atlas", "README.md", "LICENSE", "CHANGELOG.md", "CONSTITUTI
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: live exchange tests (require credentials, run with -m integration)",
+]
 
 [tool.ruff]
 target-version = "py312"
