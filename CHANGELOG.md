@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-02
+
+### Added
+
+- **Deribit adapter** (`adapters/deribit/`) — first exchange adapter
+- WebSocket client with OAuth2 authentication (`public/auth`)
+- Application-layer heartbeat (`public/set_heartbeat` + `public/test` response)
+- Automatic reconnect with exponential backoff
+- Connection lifecycle events emitted as evidence
+- `AdapterCapabilities` advertisement for Deribit
+- `atlas connect` CLI command to test live connection
+- Configuration: heartbeat interval, reconnect delays
+- Unit tests for auth, client, and adapter
+
+### Changed
+
+- Added `websockets` dependency
+- Version bumped to 0.2.0
+
 ## [0.1.0] - 2026-07-02
 
 ### Added
@@ -28,4 +47,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONSTITUTION.md — frozen Phase 1 principles
 - CLI stub (`atlas record`, `atlas replay`, `atlas validate`)
 
-[0.1.0]: https://github.com/atlas/atlas-crypto-observatory/releases/tag/v0.1.0
+[0.2.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.2.0
+[0.1.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.1.0

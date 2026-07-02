@@ -8,7 +8,7 @@ from uuid import UUID, uuid7
 from pydantic import BaseModel, Field
 
 from atlas import __version__
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 
 
 def make_session_label(exchange: str, started_at: datetime | None = None) -> str:

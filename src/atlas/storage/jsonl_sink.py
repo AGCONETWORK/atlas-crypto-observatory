@@ -12,7 +12,7 @@ import structlog
 from atlas.core.envelope import EventEnvelope
 from atlas.core.taxonomy import EventCategory
 from atlas.evidence.observation import ObservationSession
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 from atlas.storage.manifest import PartitionEntry, StorageManifest
 from atlas.storage.sink import StorageSink
 

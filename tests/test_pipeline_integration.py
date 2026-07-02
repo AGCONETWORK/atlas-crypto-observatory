@@ -10,7 +10,7 @@ from atlas.core.instrument import InstrumentRef, InstrumentType
 from atlas.evidence.builder import EvidenceBuilder
 from atlas.evidence.observation import ObservationSession
 from atlas.pipeline.pipeline import PipelineRunner
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 from atlas.storage.jsonl_sink import JsonlSink
 
 

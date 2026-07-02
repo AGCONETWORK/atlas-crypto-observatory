@@ -11,7 +11,7 @@ from atlas.bus.event_bus import EventBus
 from atlas.core.envelope import EventEnvelope, EvidenceObject
 from atlas.core.taxonomy import EventCategory
 from atlas.evidence.observation import ObservationSession
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 from atlas.storage.sink import StorageSink
 
 log = structlog.get_logger(__name__)
