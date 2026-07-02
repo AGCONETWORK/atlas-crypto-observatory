@@ -33,8 +33,8 @@ See [CONSTITUTION.md](CONSTITUTION.md) for frozen Phase 1 principles.
 | v0.1.0 | Foundation — contracts, bus, pipeline, JsonlSink | Complete |
 | v0.2.0 | Deribit connection — auth, WebSocket, reconnect, heartbeat | Complete |
 | v0.3.0 | Instrument discovery & subscriptions | Complete |
-| v0.4.0 | Live recording | **Current** |
-| v0.5.0 | Replay engine | Planned |
+| v0.4.0 | Live recording | Complete |
+| v0.5.0 | Replay engine | **Current** |
 | v0.6.0 | Hardening | Planned |
 | v1.0.0 | Production observatory | Planned |
 
@@ -65,6 +65,11 @@ atlas subscribe --duration 60
 # Record live market evidence (v0.4.0)
 atlas record
 atlas record --duration 120
+
+# Validate and replay archives (v0.5.0)
+atlas validate --session 2026-07-02
+atlas replay --session 2026-07-02 --speed 10
+atlas replay --session <session-uuid> --speed 0
 
 # Run tests
 pytest

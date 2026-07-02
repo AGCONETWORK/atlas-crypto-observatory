@@ -12,6 +12,9 @@ from atlas.adapters.deribit import DeribitAdapter
 from atlas.config.settings import AtlasSettings
 from atlas.logging.setup import setup_logging
 from atlas.recording import LiveRecorder
+from atlas.replay import ReplayEngine, ReplayParameters
+from atlas.storage.archive import resolve_session_dir
+from atlas.storage.integrity import validate_archive
 
 
 def _register_stop_handler(stop: asyncio.Event) -> None:
@@ -115,6 +118,69 @@ async def _cmd_record(settings: AtlasSettings, duration: int) -> int:
     return 0
 
 
+async def _cmd_validate(settings: AtlasSettings, session: str) -> int:
+    """Validate archive integrity before replay."""
+    session_dir = resolve_session_dir(settings.data_path, session)
+    report = validate_archive(session_dir)
+
+    print(f"Archive: {session_dir}")
+    print(f"Valid:   {report.valid}")
+
+    for warning in report.warnings:
+        print(f"  WARNING: {warning.message}")
+
+    for error in report.errors:
+        print(f"  ERROR:   [{error.code}] {error.message}")
+
+    return 0 if report.valid else 1
+
+
+async def _cmd_replay(
+    settings: AtlasSettings,
+    session: str,
+    *,
+    speed: float,
+    start_seq: int | None,
+    end_seq: int | None,
+    force: bool,
+) -> int:
+    """Replay archived evidence through the Event Bus."""
+    from atlas.bus.event_bus import EventBus
+
+    session_dir = resolve_session_dir(settings.data_path, session)
+    bus = EventBus()
+    received: list[int] = []
+
+    async def counter(envelope: object) -> None:
+        received.append(getattr(envelope, "seq", 0))
+
+    bus.subscribe(counter)
+
+    engine = ReplayEngine(
+        bus,
+        session_dir,
+        parameters=ReplayParameters(
+            speed=speed,
+            start_seq=start_seq,
+            end_seq=end_seq,
+        ),
+        force=force,
+    )
+
+    print(f"Replaying: {session_dir}")
+    print(f"Speed:     {speed}x")
+
+    manifest = await engine.run()
+
+    print("Replay complete.")
+    print(f"  Replay ID:      {manifest.replay_id}")
+    print(f"  Events emitted: {manifest.events_emitted}")
+    if engine.cursor:
+        print(f"  Progress:       {engine.cursor.progress_pct}%")
+        print(f"  Final seq:      {engine.cursor.current_seq}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="atlas",
@@ -150,8 +216,32 @@ def main() -> None:
         help="Seconds to record (0 = until Ctrl+C, default: 0)",
     )
 
-    subparsers.add_parser("replay", help="Replay archived evidence (v0.5.0)")
-    subparsers.add_parser("validate", help="Validate archive integrity (v0.5.0)")
+    validate_parser = subparsers.add_parser("validate", help="Validate archive integrity")
+    validate_parser.add_argument(
+        "--session",
+        required=True,
+        help="Session path, UUID, or date (YYYY-MM-DD)",
+    )
+
+    replay_parser = subparsers.add_parser("replay", help="Replay archived evidence")
+    replay_parser.add_argument(
+        "--session",
+        required=True,
+        help="Session path, UUID, or date (YYYY-MM-DD)",
+    )
+    replay_parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Replay speed multiplier (0 = as fast as possible)",
+    )
+    replay_parser.add_argument("--start-seq", type=int, default=None)
+    replay_parser.add_argument("--end-seq", type=int, default=None)
+    replay_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replay even if integrity check fails",
+    )
 
     args = parser.parse_args()
 
@@ -172,6 +262,23 @@ def main() -> None:
 
     if args.command == "record":
         code = asyncio.run(_cmd_record(settings, args.duration))
+        sys.exit(code)
+
+    if args.command == "validate":
+        code = asyncio.run(_cmd_validate(settings, args.session))
+        sys.exit(code)
+
+    if args.command == "replay":
+        code = asyncio.run(
+            _cmd_replay(
+                settings,
+                args.session,
+                speed=args.speed,
+                start_seq=args.start_seq,
+                end_seq=args.end_seq,
+                force=args.force,
+            )
+        )
         sys.exit(code)
 
     print(f"Command '{args.command}' not yet implemented. Current release: v{__version__}")
