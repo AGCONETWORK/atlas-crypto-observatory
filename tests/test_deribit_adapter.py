@@ -33,3 +33,15 @@ async def test_discover_requires_connection() -> None:
     adapter = DeribitAdapter(AtlasSettings())
     with pytest.raises(RuntimeError, match="Not connected"):
         await adapter.discover()
+
+
+@pytest.mark.asyncio
+async def test_message_count_without_evidence_handler() -> None:
+    adapter = DeribitAdapter(AtlasSettings())
+    await adapter._on_market_message(
+        {
+            "method": "subscription",
+            "params": {"channel": "ticker.BTC-PERPETUAL.100ms", "data": {}},
+        }
+    )
+    assert adapter.message_count == 1

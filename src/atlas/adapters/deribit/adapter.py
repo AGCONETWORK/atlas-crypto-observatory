@@ -227,12 +227,13 @@ class DeribitAdapter(ExchangeAdapter):
 
     async def _on_market_message(self, message: dict[str, Any]) -> None:
         """Forward market subscription messages as evidence."""
+        self._message_count += 1
+
         if self._evidence_handler is None:
             return
 
         channel, instrument, exchange_ts = parse_subscription_message(message)
         stream = channel.split(".")[0] if "." in channel else "unknown"
-        self._message_count += 1
 
         evidence = self._builder.build_market_evidence(
             exchange=EXCHANGE_ID,
