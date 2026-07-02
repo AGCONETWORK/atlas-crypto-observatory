@@ -25,6 +25,8 @@ class AtlasSettings(BaseSettings):
     deribit_heartbeat_interval: int = 30
     deribit_reconnect_base_delay: float = 1.0
     deribit_reconnect_max_delay: float = 60.0
+    storage_flush_every: int = 500
+    health_stale_threshold_seconds: float = 120.0
 
     # Deribit-specific (loaded without ATLAS_ prefix via nested or direct env)
     deribit_api_key: str = Field(default="", validation_alias="DERIBIT_API_KEY")

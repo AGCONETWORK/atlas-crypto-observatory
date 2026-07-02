@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 from enum import StrEnum
 from pathlib import Path
@@ -193,6 +194,56 @@ def validate_session_match(session: ObservationSession, manifest: StorageManifes
     return report
 
 
+def validate_checksums(
+    session_dir: Path,
+    manifest: StorageManifest,
+) -> IntegrityReport:
+    """Validate partition and manifest SHA256 checksums when present."""
+    report = IntegrityReport(valid=True)
+
+    for partition in manifest.partitions:
+        if not partition.sha256:
+            continue
+        full_path = session_dir / partition.path
+        if not full_path.exists():
+            continue
+        actual = hashlib.sha256(full_path.read_bytes()).hexdigest()
+        if actual != partition.sha256:
+            report.valid = False
+            report.errors.append(
+                IntegrityError(
+                    code=IntegrityErrorCode.CHECKSUM_MISMATCH,
+                    message=(
+                        f"Checksum mismatch for {partition.path}: "
+                        f"expected {partition.sha256}, got {actual}"
+                    ),
+                    path=str(full_path),
+                )
+            )
+
+    if manifest.archive and manifest.archive.manifest_sha256:
+        manifest_path = session_dir / "metadata" / "manifest.json"
+        if manifest_path.exists():
+            stored = manifest.archive.manifest_sha256
+            canonical = manifest.model_copy(deep=True)
+            if canonical.archive:
+                canonical.archive.manifest_sha256 = ""
+            expected = hashlib.sha256(
+                canonical.model_dump_json(indent=2).encode("utf-8")
+            ).hexdigest()
+            if expected != stored:
+                report.valid = False
+                report.errors.append(
+                    IntegrityError(
+                        code=IntegrityErrorCode.CHECKSUM_MISMATCH,
+                        message="manifest.json checksum mismatch",
+                        path=str(manifest_path),
+                    )
+                )
+
+    return report
+
+
 def validate_archive(session_dir: Path, *, strict_sequence: bool = False) -> IntegrityReport:
     """
     Full pre-replay validation gate.
@@ -224,6 +275,7 @@ def validate_archive(session_dir: Path, *, strict_sequence: bool = False) -> Int
     _merge_reports(report, validate_partitions(session_dir, manifest))
     if report.valid:
         _merge_reports(report, validate_readable_partitions(session_dir, manifest))
+        _merge_reports(report, validate_checksums(session_dir, manifest))
 
     if strict_sequence and report.valid:
         from atlas.storage.reader import read_events

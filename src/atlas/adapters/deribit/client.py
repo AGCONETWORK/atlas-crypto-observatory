@@ -96,6 +96,8 @@ class DeribitWebSocketClient:
         self._shutdown = asyncio.Event()
         self._reconnect_attempt = 0
         self._lock = asyncio.Lock()
+        self._last_market_message_at: datetime | None = None
+        self._disconnect_at: datetime | None = None
 
     @property
     def state(self) -> ConnectionState:
@@ -108,6 +110,10 @@ class DeribitWebSocketClient:
     @property
     def auth(self) -> DeribitAuthState:
         return self._auth
+
+    @property
+    def last_market_message_at(self) -> datetime | None:
+        return self._last_market_message_at
 
     def next_request_id(self) -> int:
         """Public request ID generator for adapter RPC calls."""
@@ -279,6 +285,7 @@ class DeribitWebSocketClient:
             return
 
         if method == "subscription" and self._on_message:
+            self._last_market_message_at = datetime.now(UTC)
             await self._on_message(data)
             return
 
@@ -317,6 +324,7 @@ class DeribitWebSocketClient:
                 await self._handle_server_message(data)
         except websockets.ConnectionClosed as exc:
             self._metrics.last_disconnect_at = datetime.now(UTC)
+            self._disconnect_at = self._metrics.last_disconnect_at
             log.warning("connection.closed", code=exc.code, reason=exc.reason)
             await self._emit_lifecycle(
                 "connection.closed",
@@ -364,9 +372,35 @@ class DeribitWebSocketClient:
 
         try:
             await self.connect(is_reconnect=True)
+            await self._emit_gap_if_needed()
         except Exception as exc:
             log.error("connection.reconnect_failed", error=str(exc))
             await self._reconnect()
+
+    async def _emit_gap_if_needed(self) -> None:
+        """Emit gap.detected lifecycle event after reconnect."""
+        if self._disconnect_at is None:
+            return
+
+        gap_start = self._last_market_message_at or self._disconnect_at
+        gap_seconds = (datetime.now(UTC) - gap_start).total_seconds()
+        if gap_seconds <= 0:
+            return
+
+        await self._emit_lifecycle(
+            "gap.detected",
+            {
+                "gap_seconds": gap_seconds,
+                "disconnected_at": self._disconnect_at.isoformat(),
+                "last_message_at": (
+                    self._last_market_message_at.isoformat()
+                    if self._last_market_message_at
+                    else None
+                ),
+                "reconnected_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        self._disconnect_at = None
 
     async def _cleanup_connection(self) -> None:
         """Close socket and cancel reader without marking shutdown."""
