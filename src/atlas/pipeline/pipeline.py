@@ -48,7 +48,7 @@ class EvidencePipeline:
             "recorder.started",
             {"session_id": str(self._session.session_id)},
         )
-        await log.ainfo(
+        log.info(
             "pipeline.started",
             session_id=str(self._session.session_id),
             session_label=self._session.session_label,
@@ -87,7 +87,7 @@ class EvidencePipeline:
         )
         self._running = False
         self._session.finalize()
-        await log.ainfo(
+        log.info(
             "pipeline.stopped",
             session_id=str(self._session.session_id),
             events=self._seq,

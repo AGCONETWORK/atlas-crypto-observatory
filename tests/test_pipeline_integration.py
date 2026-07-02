@@ -43,7 +43,7 @@ async def test_pipeline_records_to_jsonl(tmp_path: Path) -> None:
     await pipeline.ingest(evidence)
     await runner.stop()
 
-    date_dir = tmp_path / session.start_time.strftime("%Y-%m-%d")
+    date_dir = tmp_path / session.start_time.strftime("%Y-%m-%d") / str(session.session_id)
     manifest_path = date_dir / "metadata" / "manifest.json"
     session_path = date_dir / "metadata" / "session.json"
     market_path = date_dir / "market" / "BTC-PERPETUAL" / "events.jsonl.gz"

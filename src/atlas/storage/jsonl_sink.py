@@ -39,10 +39,14 @@ class JsonlSink(StorageSink):
         self._seq_min: int | None = None
         self._seq_max: int = 0
 
+    @property
+    def session_dir(self) -> Path | None:
+        return self._session_dir
+
     async def open_session(self, session: ObservationSession) -> None:
         self._session = session
         date_part = session.start_time.strftime("%Y-%m-%d")
-        self._session_dir = self._data_path / date_part
+        self._session_dir = self._data_path / date_part / str(session.session_id)
         metadata_dir = self._session_dir / "metadata"
         market_dir = self._session_dir / "market"
         metadata_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +69,7 @@ class JsonlSink(StorageSink):
             encoding="utf-8",
         )
 
-        await log.ainfo(
+        log.info(
             "storage.session_opened",
             session_id=str(session.session_id),
             path=str(self._session_dir),
@@ -151,7 +155,7 @@ class JsonlSink(StorageSink):
         session_path = metadata_dir / "session.json"
         session_path.write_text(session.model_dump_json(indent=2), encoding="utf-8")
 
-        await log.ainfo(
+        log.info(
             "storage.session_finalized",
             session_id=str(session.session_id),
             event_count=manifest.event_count,
