@@ -1,4 +1,4 @@
-"""Deribit exchange adapter — connection layer for v0.2.0."""
+"""Deribit exchange adapter — connection, discovery, and subscriptions."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from atlas.adapters.deribit.constants import (
     PRODUCTION_WS_URL,
     TESTNET_WS_URL,
 )
+from atlas.adapters.deribit.discovery import DiscoveryResult, discover_btc_universe
+from atlas.adapters.deribit.messages import parse_subscription_message
+from atlas.adapters.deribit.subscription import SubscriptionManager, SubscriptionResult
 from atlas.config.settings import AtlasSettings
 from atlas.core.capabilities import AdapterCapabilities
 from atlas.core.envelope import EvidenceObject
@@ -32,8 +35,7 @@ class DeribitAdapter(ExchangeAdapter):
     """
     Deribit-specific adapter. Exchange logic lives only here.
 
-    v0.2.0: connect, authenticate, heartbeat, reconnect, graceful shutdown.
-    Subscriptions arrive in v0.3.0.
+    v0.3.0: instrument discovery and market data subscriptions.
     """
 
     def __init__(
@@ -47,6 +49,9 @@ class DeribitAdapter(ExchangeAdapter):
         self._builder = EvidenceBuilder(source=EXCHANGE_ID, adapter_version=ADAPTER_VERSION)
         self._client: DeribitWebSocketClient | None = None
         self._run_task: asyncio.Task[None] | None = None
+        self._discovery: DiscoveryResult | None = None
+        self._subscriptions = SubscriptionManager()
+        self._message_count = 0
 
     @property
     def capabilities(self) -> AdapterCapabilities:
@@ -70,6 +75,14 @@ class DeribitAdapter(ExchangeAdapter):
     def client(self) -> DeribitWebSocketClient | None:
         return self._client
 
+    @property
+    def discovery(self) -> DiscoveryResult | None:
+        return self._discovery
+
+    @property
+    def message_count(self) -> int:
+        return self._message_count
+
     def _ws_url(self) -> str:
         if self._settings.deribit_environment == "testnet":
             return TESTNET_WS_URL
@@ -92,9 +105,14 @@ class DeribitAdapter(ExchangeAdapter):
             reconnect_max_delay=self._settings.deribit_reconnect_max_delay,
         )
 
-    async def _emit_connection_evidence(self, stream: str, payload: dict[str, Any]) -> None:
+    async def _emit_lifecycle(
+        self,
+        category: EventCategory,
+        stream: str,
+        payload: dict[str, Any],
+    ) -> None:
         evidence = self._builder.build_lifecycle_evidence(
-            category=EventCategory.CONNECTION,
+            category=category,
             exchange=EXCHANGE_ID,
             stream=stream,
             channel=stream,
@@ -111,7 +129,8 @@ class DeribitAdapter(ExchangeAdapter):
         self._client = DeribitWebSocketClient(
             self._client_config(),
             on_message=self._on_market_message,
-            on_lifecycle=self._on_lifecycle,
+            on_lifecycle=self._on_connection_lifecycle,
+            on_reconnected=self._on_reconnected,
         )
         await self._client.connect()
         log.info(
@@ -135,40 +154,101 @@ class DeribitAdapter(ExchangeAdapter):
 
         log.info("adapter.disconnected", exchange=EXCHANGE_ID)
 
-    async def subscribe(self) -> None:
-        """Subscribe to market channels — implemented in v0.3.0."""
-        msg = "Deribit subscriptions are implemented in v0.3.0"
-        raise NotImplementedError(msg)
+    async def discover(self) -> DiscoveryResult:
+        """Discover BTC instrument universe via public/get_instruments."""
+        if self._client is None:
+            msg = "Not connected — call connect() first"
+            raise RuntimeError(msg)
 
-    async def _on_lifecycle(self, event: str, payload: dict[str, Any]) -> None:
-        await self._emit_connection_evidence(event, payload)
+        self._discovery = await discover_btc_universe(
+            self._client,
+            futures_count=self._settings.futures_count,
+        )
+        summary = self._discovery.summary()
+        log.info("discovery.completed", **summary)
+        await self._emit_lifecycle(EventCategory.SYSTEM, "discovery.completed", summary)
+        return self._discovery
+
+    async def subscribe(self) -> SubscriptionResult:
+        """Discover instruments (if needed) and subscribe to configured channels."""
+        if self._client is None:
+            msg = "Not connected — call connect() first"
+            raise RuntimeError(msg)
+
+        if self._discovery is None:
+            await self.discover()
+
+        assert self._discovery is not None
+        plan = self._subscriptions.build_plan(
+            self._discovery,
+            channel_types=self._settings.channel_list,
+            interval=self._settings.interval,
+        )
+        log.info(
+            "subscription.plan_built",
+            instruments=self._discovery.instrument_count,
+            channels=plan.channel_count,
+            batches=len(plan.batches),
+        )
+
+        result = await self._subscriptions.subscribe_all(self._client)
+
+        if result.failed_batches:
+            await self._emit_lifecycle(
+                EventCategory.SUBSCRIPTION,
+                "subscription.failed",
+                {
+                    "failed_batches": len(result.failed_batches),
+                    "subscribed": result.success_count,
+                },
+            )
+        else:
+            await self._emit_lifecycle(
+                EventCategory.SUBSCRIPTION,
+                "subscription.completed",
+                {
+                    "subscribed": result.success_count,
+                    "channels": plan.channel_count,
+                    "instruments": self._discovery.instrument_count,
+                },
+            )
+
+        return result
+
+    async def _on_reconnected(self) -> None:
+        """Re-subscribe after automatic reconnect."""
+        if self._subscriptions.plan is None:
+            return
+        log.info("adapter.resubscribing_after_reconnect")
+        await self._subscriptions.resubscribe(self._client)  # type: ignore[arg-type]
+
+    async def _on_connection_lifecycle(self, event: str, payload: dict[str, Any]) -> None:
+        await self._emit_lifecycle(EventCategory.CONNECTION, event, payload)
 
     async def _on_market_message(self, message: dict[str, Any]) -> None:
-        """Forward market messages as evidence — wired fully in v0.3.0+."""
+        """Forward market subscription messages as evidence."""
         if self._evidence_handler is None:
             return
 
-        params = message.get("params", {})
-        channel = params.get("channel", "unknown")
+        channel, instrument, exchange_ts = parse_subscription_message(message)
         stream = channel.split(".")[0] if "." in channel else "unknown"
+        self._message_count += 1
 
         evidence = self._builder.build_market_evidence(
             exchange=EXCHANGE_ID,
             stream=stream,
             channel=channel,
             payload=message,
+            instrument=instrument,
+            exchange_timestamp=exchange_ts,
         )
         await self._evidence_handler(evidence)
 
     async def run(self, bus: Any = None) -> None:
-        """
-        Maintain connection until cancelled.
-
-        Optional bus argument reserved for future direct bus wiring.
-        Prefer evidence_handler in constructor for pipeline integration.
-        """
+        """Connect, subscribe, and maintain until cancelled."""
         _ = bus
         await self.connect()
+        await self.subscribe()
         assert self._client is not None
         self._run_task = asyncio.create_task(self._client.run_until_shutdown())
         try:

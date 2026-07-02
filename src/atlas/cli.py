@@ -13,20 +13,24 @@ from atlas.config.settings import AtlasSettings
 from atlas.logging.setup import setup_logging
 
 
-async def _cmd_connect(settings: AtlasSettings, duration: int) -> int:
-    """Test Deribit connection — connect, auth, heartbeat, then shutdown."""
-    adapter = DeribitAdapter(settings)
-    stop = asyncio.Event()
+def _register_stop_handler(stop: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
 
     def _handle_signal() -> None:
         stop.set()
 
-    loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, _handle_signal)
         except NotImplementedError:
             pass
+
+
+async def _cmd_connect(settings: AtlasSettings, duration: int) -> int:
+    """Test Deribit connection — connect, auth, heartbeat, then shutdown."""
+    adapter = DeribitAdapter(settings)
+    stop = asyncio.Event()
+    _register_stop_handler(stop)
 
     await adapter.connect()
     print(
@@ -34,19 +38,55 @@ async def _cmd_connect(settings: AtlasSettings, duration: int) -> int:
         f"Press Ctrl+C to stop. Auto-stop in {duration}s."
     )
 
+    client = adapter.client
     try:
         await asyncio.wait_for(stop.wait(), timeout=duration)
     except TimeoutError:
         pass
     finally:
+        reconnects = client.metrics.reconnect_count if client else 0
+        heartbeats = client.metrics.heartbeats_received if client else 0
         await adapter.disconnect()
+        print(f"Session complete. Reconnects: {reconnects}, Heartbeats: {heartbeats}")
 
-    client = adapter.client
-    if client:
-        print(
-            f"Session complete. Reconnects: {client.metrics.reconnect_count}, "
-            f"Heartbeats: {client.metrics.heartbeats_received}"
-        )
+    return 0
+
+
+async def _cmd_subscribe(settings: AtlasSettings, duration: int) -> int:
+    """Discover instruments, subscribe to market data, count incoming messages."""
+    adapter = DeribitAdapter(settings)
+    stop = asyncio.Event()
+    _register_stop_handler(stop)
+
+    await adapter.connect()
+    discovery = await adapter.discover()
+    summary = discovery.summary()
+    print(f"Discovered: {summary}")
+
+    result = await adapter.subscribe()
+    print(
+        f"Subscribed to {result.success_count} channels "
+        f"({len(result.failed_batches)} failed batches)."
+    )
+    print(f"Listening for {duration}s — press Ctrl+C to stop early.")
+
+    assert adapter.client is not None
+    run_task = asyncio.create_task(adapter.client.run_until_shutdown())
+
+    try:
+        await asyncio.wait_for(stop.wait(), timeout=duration)
+    except TimeoutError:
+        pass
+    finally:
+        messages = adapter.message_count
+        run_task.cancel()
+        try:
+            await run_task
+        except asyncio.CancelledError:
+            pass
+        await adapter.disconnect()
+        print(f"Received {messages} market messages.")
+
     return 0
 
 
@@ -66,6 +106,17 @@ def main() -> None:
         help="Seconds to maintain connection (default: 30)",
     )
 
+    subscribe_parser = subparsers.add_parser(
+        "subscribe",
+        help="Discover and subscribe to BTC market data",
+    )
+    subscribe_parser.add_argument(
+        "--duration",
+        type=int,
+        default=60,
+        help="Seconds to listen after subscribing (default: 60)",
+    )
+
     subparsers.add_parser("record", help="Start live evidence capture (v0.4.0)")
     subparsers.add_parser("replay", help="Replay archived evidence (v0.5.0)")
     subparsers.add_parser("validate", help="Validate archive integrity (v0.5.0)")
@@ -81,6 +132,10 @@ def main() -> None:
 
     if args.command == "connect":
         code = asyncio.run(_cmd_connect(settings, args.duration))
+        sys.exit(code)
+
+    if args.command == "subscribe":
+        code = asyncio.run(_cmd_subscribe(settings, args.duration))
         sys.exit(code)
 
     print(f"Command '{args.command}' not yet implemented. Current release: v{__version__}")

@@ -31,6 +31,7 @@ log = structlog.get_logger(__name__)
 
 MessageHandler = Callable[[dict[str, Any]], Awaitable[None]]
 LifecycleHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
+ReconnectHandler = Callable[[], Awaitable[None]]
 
 
 class ConnectionState(StrEnum):
@@ -79,10 +80,12 @@ class DeribitWebSocketClient:
         *,
         on_message: MessageHandler | None = None,
         on_lifecycle: LifecycleHandler | None = None,
+        on_reconnected: ReconnectHandler | None = None,
     ) -> None:
         self._config = config
         self._on_message = on_message
         self._on_lifecycle = on_lifecycle
+        self._on_reconnected = on_reconnected
         self._ws: ClientConnection | None = None
         self._state = ConnectionState.DISCONNECTED
         self._auth = DeribitAuthState()
@@ -106,6 +109,10 @@ class DeribitWebSocketClient:
     def auth(self) -> DeribitAuthState:
         return self._auth
 
+    def next_request_id(self) -> int:
+        """Public request ID generator for adapter RPC calls."""
+        return self._next_id()
+
     def _next_id(self) -> int:
         self._request_id += 1
         return self._request_id
@@ -114,7 +121,7 @@ class DeribitWebSocketClient:
         if self._on_lifecycle:
             await self._on_lifecycle(event, payload)
 
-    async def connect(self) -> None:
+    async def connect(self, *, is_reconnect: bool = False) -> None:
         """Establish WebSocket connection, authenticate, and enable heartbeat."""
         if self._shutdown.is_set():
             msg = "Client is shut down"
@@ -145,6 +152,9 @@ class DeribitWebSocketClient:
                 log.warning("connection.unauthenticated", reason="no_credentials")
 
             await self.enable_heartbeat()
+
+        if is_reconnect and self._on_reconnected:
+            await self._on_reconnected()
 
     async def authenticate(self) -> None:
         """Authenticate using client credentials."""
@@ -353,7 +363,7 @@ class DeribitWebSocketClient:
             return
 
         try:
-            await self.connect()
+            await self.connect(is_reconnect=True)
         except Exception as exc:
             log.error("connection.reconnect_failed", error=str(exc))
             await self._reconnect()
@@ -391,7 +401,8 @@ class DeribitWebSocketClient:
         log.info("connection.shutdown_complete")
 
     async def run_until_shutdown(self) -> None:
-        """Connect and maintain connection until disconnect() is called."""
-        await self.connect()
+        """Maintain connection until disconnect() is called."""
+        if self._state == ConnectionState.DISCONNECTED:
+            await self.connect()
         while not self._shutdown.is_set():
             await asyncio.sleep(1)

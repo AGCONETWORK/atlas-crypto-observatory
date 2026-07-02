@@ -2,7 +2,8 @@
 
 import pytest
 
-from atlas.adapters.deribit import DeribitAdapter, EXCHANGE_ID
+from atlas.adapters.deribit import DeribitAdapter
+from atlas.adapters.deribit.constants import EXCHANGE_ID
 from atlas.config.settings import AtlasSettings
 
 
@@ -20,13 +21,15 @@ def test_capabilities() -> None:
     assert not caps.supports_channel("unknown")
 
 
-def test_subscribe_not_implemented() -> None:
+@pytest.mark.asyncio
+async def test_subscribe_requires_connection() -> None:
     adapter = DeribitAdapter(AtlasSettings())
-    assert adapter.capabilities.supports_options
+    with pytest.raises(RuntimeError, match="Not connected"):
+        await adapter.subscribe()
 
 
 @pytest.mark.asyncio
-async def test_subscribe_raises() -> None:
+async def test_discover_requires_connection() -> None:
     adapter = DeribitAdapter(AtlasSettings())
-    with pytest.raises(NotImplementedError, match="v0.3.0"):
-        await adapter.subscribe()
+    with pytest.raises(RuntimeError, match="Not connected"):
+        await adapter.discover()

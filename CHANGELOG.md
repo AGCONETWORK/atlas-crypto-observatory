@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-02
+
+### Added
+
+- **Instrument discovery** via `public/get_instruments` (BTC spot, perpetual, nearest futures, full options chain)
+- **Subscription manager** with batched `public/subscribe` for `book`, `ticker`, `trades` at configured interval
+- **Instrument parser** — Deribit symbols mapped to internal `Instrument` model
+- **Auto re-subscribe** after WebSocket reconnect
+- `atlas subscribe` CLI command to discover, subscribe, and count market messages
+- Market message parser for channel, instrument, and exchange timestamp
+
+### Changed
+
+- `DeribitAdapter.subscribe()` fully implemented
+- Adapter version bumped to 0.3.0
+
 ## [0.2.0] - 2026-07-02
 
 ### Added
@@ -47,5 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONSTITUTION.md — frozen Phase 1 principles
 - CLI stub (`atlas record`, `atlas replay`, `atlas validate`)
 
+[0.3.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.1.0
