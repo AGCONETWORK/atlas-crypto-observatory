@@ -1,6 +1,6 @@
 """Deribit adapter constants."""
 
-ADAPTER_VERSION = "0.4.0"
+ADAPTER_VERSION = "1.0.0"
 EXCHANGE_ID = "deribit"
 API_VERSION = "v2"
 
