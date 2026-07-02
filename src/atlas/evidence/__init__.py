@@ -1,11 +1,10 @@
-"""Evidence layer public API."""
+"""Evidence layer public API.
+
+Import submodules directly to avoid circular imports at package load time:
+  from atlas.evidence.builder import EvidenceBuilder
+  from atlas.evidence.observation import ObservationSession
+"""
 
 from atlas.evidence.builder import EvidenceBuilder
-from atlas.evidence.observation import DataQualityMetrics, ObservationSession, make_session_label
 
-__all__ = [
-    "DataQualityMetrics",
-    "EvidenceBuilder",
-    "ObservationSession",
-    "make_session_label",
-]
+__all__ = ["EvidenceBuilder"]

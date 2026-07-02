@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from atlas.evidence.observation import ObservationSession, make_session_label
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 
 
 def test_session_has_uuidv7() -> None:

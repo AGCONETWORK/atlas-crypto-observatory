@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 
 STORAGE_MANIFEST_VERSION = 1
 

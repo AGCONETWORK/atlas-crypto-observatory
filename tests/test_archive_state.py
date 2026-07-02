@@ -2,7 +2,7 @@
 
 import pytest
 
-from atlas.storage.archive_state import ArchiveState
+from atlas.core.archive_state import ArchiveState
 
 
 def test_valid_transitions() -> None:
