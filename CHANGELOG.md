@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-02
+
+### Added
+
+- **Live recording** via `LiveRecorder` — Adapter → Pipeline → Event Bus → JsonlSink
+- `atlas record` CLI command (runs until Ctrl+C, or `--duration N`)
+- Per-session archive directories (`{date}/{session_id}/`)
+- `metadata/subscriptions.json` written at recording start
+- Session data quality metrics on stop (reconnects, dropped messages)
+
+### Changed
+
+- Storage layout isolates each observation session under its UUID
+- Package version 0.4.0, Deribit adapter 0.4.0
+
 ## [0.3.0] - 2026-07-02
 
 ### Added
@@ -63,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONSTITUTION.md — frozen Phase 1 principles
 - CLI stub (`atlas record`, `atlas replay`, `atlas validate`)
 
+[0.4.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.4.0
 [0.3.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.3.0
 [0.2.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AGCONETWORK/atlas-crypto-observatory/releases/tag/v0.1.0

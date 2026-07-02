@@ -11,6 +11,7 @@ from atlas import __version__
 from atlas.adapters.deribit import DeribitAdapter
 from atlas.config.settings import AtlasSettings
 from atlas.logging.setup import setup_logging
+from atlas.recording import LiveRecorder
 
 
 def _register_stop_handler(stop: asyncio.Event) -> None:
@@ -90,6 +91,30 @@ async def _cmd_subscribe(settings: AtlasSettings, duration: int) -> int:
     return 0
 
 
+async def _cmd_record(settings: AtlasSettings, duration: int) -> int:
+    """Record live market evidence to immutable JSONL archives."""
+    recorder = LiveRecorder(settings)
+    stop = asyncio.Event()
+    _register_stop_handler(stop)
+
+    if duration > 0:
+        print(f"Recording to {settings.data_path} — auto-stop in {duration}s (Ctrl+C to stop early).")
+    else:
+        print(f"Recording to {settings.data_path} — press Ctrl+C to stop.")
+
+    summary = await recorder.run_until(stop, duration=duration if duration > 0 else None)
+
+    print("Recording complete.")
+    print(f"  Session:      {summary.session_label}")
+    print(f"  Session ID:   {summary.session_id}")
+    print(f"  Events:       {summary.events_recorded}")
+    print(f"  Market msgs:  {summary.market_messages}")
+    print(f"  Reconnects:   {summary.reconnects}")
+    if summary.session_dir:
+        print(f"  Archive path: {summary.session_dir}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="atlas",
@@ -117,7 +142,14 @@ def main() -> None:
         help="Seconds to listen after subscribing (default: 60)",
     )
 
-    subparsers.add_parser("record", help="Start live evidence capture (v0.4.0)")
+    record_parser = subparsers.add_parser("record", help="Record live market evidence to disk")
+    record_parser.add_argument(
+        "--duration",
+        type=int,
+        default=0,
+        help="Seconds to record (0 = until Ctrl+C, default: 0)",
+    )
+
     subparsers.add_parser("replay", help="Replay archived evidence (v0.5.0)")
     subparsers.add_parser("validate", help="Validate archive integrity (v0.5.0)")
 
@@ -136,6 +168,10 @@ def main() -> None:
 
     if args.command == "subscribe":
         code = asyncio.run(_cmd_subscribe(settings, args.duration))
+        sys.exit(code)
+
+    if args.command == "record":
+        code = asyncio.run(_cmd_record(settings, args.duration))
         sys.exit(code)
 
     print(f"Command '{args.command}' not yet implemented. Current release: v{__version__}")

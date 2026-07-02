@@ -32,8 +32,8 @@ See [CONSTITUTION.md](CONSTITUTION.md) for frozen Phase 1 principles.
 |---------|-----------|--------|
 | v0.1.0 | Foundation — contracts, bus, pipeline, JsonlSink | Complete |
 | v0.2.0 | Deribit connection — auth, WebSocket, reconnect, heartbeat | Complete |
-| v0.3.0 | Instrument discovery & subscriptions | **Current** |
-| v0.4.0 | Live recording | Planned |
+| v0.3.0 | Instrument discovery & subscriptions | Complete |
+| v0.4.0 | Live recording | **Current** |
 | v0.5.0 | Replay engine | Planned |
 | v0.6.0 | Hardening | Planned |
 | v1.0.0 | Production observatory | Planned |
@@ -62,6 +62,10 @@ atlas connect --duration 30
 # Discover and subscribe to BTC market data (v0.3.0)
 atlas subscribe --duration 60
 
+# Record live market evidence (v0.4.0)
+atlas record
+atlas record --duration 120
+
 # Run tests
 pytest
 
@@ -77,6 +81,7 @@ src/atlas/
 ├── evidence/       # Evidence Builder, Observation Session
 ├── bus/            # Event Bus (central hub)
 ├── pipeline/       # Evidence Pipeline
+├── recording/      # LiveRecorder orchestration (v0.4.0)
 ├── storage/        # StorageSink, JsonlSink, manifest, integrity
 ├── replay/         # Replay manifest v1 (engine in v0.5.0)
 ├── adapters/       # Exchange adapters
@@ -90,12 +95,14 @@ src/atlas/
 ```
 data/
   2026-07-02/
-    market/
-      BTC-PERPETUAL/
-        events.jsonl.gz
-    metadata/
-      session.json
-      manifest.json
+    {session_id}/
+      market/
+        BTC-PERPETUAL/
+          events.jsonl.gz
+      metadata/
+        session.json
+        manifest.json
+        subscriptions.json
 ```
 
 ## License
