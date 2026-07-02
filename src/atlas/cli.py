@@ -12,6 +12,7 @@ from atlas.adapters.deribit import DeribitAdapter
 from atlas.config.settings import AtlasSettings
 from atlas.logging.setup import setup_logging
 from atlas.recording import LiveRecorder
+from atlas.recording.status import load_session_status
 from atlas.replay import ReplayEngine, ReplayParameters
 from atlas.storage.archive import resolve_session_dir
 from atlas.storage.integrity import validate_archive
@@ -113,8 +114,29 @@ async def _cmd_record(settings: AtlasSettings, duration: int) -> int:
     print(f"  Events:       {summary.events_recorded}")
     print(f"  Market msgs:  {summary.market_messages}")
     print(f"  Reconnects:   {summary.reconnects}")
+    if summary.gap_count:
+        print(f"  Gaps:         {summary.gap_count} (largest {summary.largest_gap_seconds:.1f}s)")
     if summary.session_dir:
         print(f"  Archive path: {summary.session_dir}")
+    return 0
+
+
+def _cmd_status(settings: AtlasSettings, session: str | None) -> int:
+    """Show archive health and recording metrics for a session."""
+    try:
+        status = load_session_status(settings.data_path, session)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    print(f"Archive:  {status.session_dir}")
+    print(f"Session:  {status.session.session_label}")
+    print(f"State:    {status.state.value}")
+    print(f"Events:   {status.events_recorded}")
+    print(f"Reconnects: {status.reconnects}")
+    print(f"Gaps:     {status.gap_count} (largest {status.largest_gap_seconds:.1f}s)")
+    if status.state.value == "RECORDING":
+        print(f"Stale:    {'yes' if status.is_stale else 'no'}")
     return 0
 
 
@@ -243,6 +265,13 @@ def main() -> None:
         help="Replay even if integrity check fails",
     )
 
+    status_parser = subparsers.add_parser("status", help="Show session archive health")
+    status_parser.add_argument(
+        "--session",
+        default=None,
+        help="Session path, UUID, or date (default: latest archive)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -262,6 +291,10 @@ def main() -> None:
 
     if args.command == "record":
         code = asyncio.run(_cmd_record(settings, args.duration))
+        sys.exit(code)
+
+    if args.command == "status":
+        code = _cmd_status(settings, args.session)
         sys.exit(code)
 
     if args.command == "validate":

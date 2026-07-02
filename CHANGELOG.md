@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-02
+
+### Added
+
+- **HealthMonitor** — ingest rate and staleness tracking during live recording
+- **SessionMetadataTracker** — `metadata/reconnects.json` with reconnect and gap events
+- **Gap detection** — `gap.detected` lifecycle event emitted after reconnect
+- **JsonlSink hardening** — periodic flush and SHA256 checksums on finalize
+- **Manifest checksums** — partition and manifest integrity hashes in `manifest.json`
+- `atlas status` CLI command — session archive health summary
+- Configuration: `ATLAS_STORAGE_FLUSH_EVERY`, `ATLAS_HEALTH_STALE_THRESHOLD_SECONDS`
+
+### Changed
+
+- `LiveRecorder` wires health monitor and metadata tracker with periodic flush
+- Integrity validation verifies partition and manifest checksums when present
+- Package version 0.6.0
+
 ## [0.5.0] - 2026-07-02
 
 ### Added

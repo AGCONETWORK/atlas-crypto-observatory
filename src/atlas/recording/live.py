@@ -13,11 +13,17 @@ from atlas.adapters.deribit import DeribitAdapter
 from atlas.adapters.deribit.constants import ADAPTER_VERSION, API_VERSION, EXCHANGE_ID
 from atlas.bus.event_bus import EventBus
 from atlas.config.settings import AtlasSettings
+from atlas.core.envelope import EventEnvelope
+from atlas.core.taxonomy import EventCategory
 from atlas.evidence.observation import ObservationSession
 from atlas.pipeline.pipeline import EvidencePipeline, PipelineRunner
+from atlas.recording.health import HealthMonitor, HealthSnapshot
+from atlas.recording.metadata import SessionMetadataTracker
 from atlas.storage.jsonl_sink import JsonlSink
 
 log = structlog.get_logger(__name__)
+
+METADATA_FLUSH_INTERVAL_SECONDS = 30.0
 
 
 @dataclass
@@ -31,6 +37,8 @@ class RecordingSummary:
     market_messages: int
     reconnects: int
     subscription_failures: int
+    gap_count: int = 0
+    largest_gap_seconds: float = 0.0
 
 
 class LiveRecorder:
@@ -50,10 +58,19 @@ class LiveRecorder:
             api_version=API_VERSION,
         )
         self._pipeline = EvidencePipeline(self._bus, self._session)
-        self._sink = JsonlSink(settings.data_path)
+        self._sink = JsonlSink(
+            settings.data_path,
+            flush_every=settings.storage_flush_every,
+        )
         self._runner = PipelineRunner(self._bus, self._pipeline, self._sink)
+        self._health = HealthMonitor(
+            stale_threshold_seconds=settings.health_stale_threshold_seconds,
+        )
+        self._metadata = SessionMetadataTracker(session=self._session)
         self._adapter: DeribitAdapter | None = None
         self._client_task: asyncio.Task[None] | None = None
+        self._metadata_task: asyncio.Task[None] | None = None
+        self._metadata_unsubscribe: object | None = None
         self._started = False
 
     @property
@@ -64,12 +81,24 @@ class LiveRecorder:
     def adapter(self) -> DeribitAdapter | None:
         return self._adapter
 
+    def health_snapshot(self) -> HealthSnapshot:
+        """Current recording health metrics."""
+        return self._health.snapshot()
+
     async def start(self) -> None:
         """Start pipeline, storage, adapter, discovery, and subscriptions."""
         if self._started:
             return
 
         await self._runner.start()
+        self._metadata.session_dir = self._sink.session_dir
+
+        async def metadata_handler(event: EventEnvelope) -> None:
+            if event.category == EventCategory.MARKET:
+                self._health.record_message()
+            await self._metadata.observe_event(event)
+
+        self._metadata_unsubscribe = self._bus.subscribe(metadata_handler)
 
         self._adapter = DeribitAdapter(
             self._settings,
@@ -86,6 +115,7 @@ class LiveRecorder:
 
         assert self._adapter.client is not None
         self._client_task = asyncio.create_task(self._adapter.client.run_until_shutdown())
+        self._metadata_task = asyncio.create_task(self._metadata_flush_loop())
 
         self._started = True
         log.info(
@@ -95,6 +125,25 @@ class LiveRecorder:
             channels=result.success_count,
             instruments=discovery.instrument_count,
         )
+
+    async def _metadata_flush_loop(self) -> None:
+        """Periodically flush session metadata while recording."""
+        try:
+            while True:
+                await asyncio.sleep(METADATA_FLUSH_INTERVAL_SECONDS)
+                self._sync_health_to_session()
+                self._metadata.flush_session()
+                self._metadata.write_reconnects()
+        except asyncio.CancelledError:
+            raise
+
+    def _sync_health_to_session(self) -> None:
+        if self._adapter and self._adapter.client:
+            metrics = self._adapter.client.metrics
+            self._session.data_quality.reconnects = metrics.reconnect_count
+            self._session.data_quality.heartbeat_failures = metrics.heartbeat_failures
+            self._health.reconnects = metrics.reconnect_count
+            self._health.heartbeat_failures = metrics.heartbeat_failures
 
     async def _write_subscriptions_metadata(
         self,
@@ -131,10 +180,20 @@ class LiveRecorder:
                 subscription_failures=0,
             )
 
-        if self._adapter and self._adapter.client:
-            metrics = self._adapter.client.metrics
-            self._session.data_quality.reconnects = metrics.reconnect_count
-            self._session.data_quality.heartbeat_failures = metrics.heartbeat_failures
+        if self._metadata_task and not self._metadata_task.done():
+            self._metadata_task.cancel()
+            try:
+                await self._metadata_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._metadata_unsubscribe is not None:
+            unsubscribe = self._metadata_unsubscribe
+            if callable(unsubscribe):
+                unsubscribe()
+            self._metadata_unsubscribe = None
+
+        self._sync_health_to_session()
 
         if self._client_task and not self._client_task.done():
             self._client_task.cancel()
@@ -145,6 +204,9 @@ class LiveRecorder:
 
         if self._adapter:
             await self._adapter.disconnect()
+
+        self._metadata.flush_session()
+        self._metadata.write_reconnects()
 
         await self._runner.stop()
         self._started = False
@@ -181,6 +243,8 @@ class LiveRecorder:
             market_messages=market_messages,
             reconnects=self._session.data_quality.reconnects,
             subscription_failures=self._session.data_quality.subscription_failures,
+            gap_count=len(self._metadata.gap_events),
+            largest_gap_seconds=self._session.data_quality.largest_gap_seconds,
         )
 
     async def run_until(self, stop: asyncio.Event, *, duration: int | None = None) -> RecordingSummary:
